@@ -15,6 +15,10 @@ from oauth2client import tools
 from oauth2client.file import Storage
 
 from apiclient import errors
+import email
+import base64
+
+import tradeTracker # Separate module file with main tradeTracker module
 
 try:
     import argparse
@@ -27,7 +31,6 @@ except ImportError:
 SCOPES = 'https://www.googleapis.com/auth/gmail.readonly'
 CLIENT_SECRET_FILE = 'client_secret.json'
 APPLICATION_NAME = 'Gmail API Python Quickstart'
-
 
 def get_credentials():
     """Gets valid user credentials from storage.
@@ -94,6 +97,44 @@ def ListMessagesMatchingQuery(service, user_id, query=''):
   except errors.HttpError as error:
     print('An error occurred: %s' % error)
 
+# """Get Message with given ID.
+# """
+# Function from Google API page
+# https://developers.google.com/gmail/api/v1/reference/users/messages/get
+def GetMimeMessage(service, user_id, msg_id):
+  """Get a Message and use it to create a MIME Message.
+
+  Args:
+    service: Authorized Gmail API service instance.
+    user_id: User's email address. The special value "me"
+    can be used to indicate the authenticated user.
+    msg_id: The ID of the Message required.
+
+  Returns:
+    A MIME Message, consisting of data from Message.
+  """
+  try:
+    message = service.users().messages().get(userId=user_id, id=msg_id,
+                                             format='raw').execute()
+    msg_str = base64.urlsafe_b64decode(message['raw'].encode('ASCII')).decode('utf-8')
+    mime_msg = email.message_from_string(msg_str)
+
+    return mime_msg
+
+  except errors.HttpError as error:
+    print('An error occurred: %s' % error)
+
+# Given a MimeMessage object, return the 'text' body
+def getTextBodyFromMimeMsg(mime_msg):
+    messageMainType = mime_msg.get_content_maintype()
+    if messageMainType == 'multipart':
+            for part in mime_msg.get_payload():
+                    if part.get_content_maintype() == 'text':
+                            return part.get_payload()
+            return ""
+    elif messageMainType == 'text':
+            return mime_msg.get_payload()
+
 def main():
     """Shows basic usage of the Gmail API.
 
@@ -106,26 +147,44 @@ def main():
     http = credentials.authorize(httplib2.Http())
     service = discovery.build('gmail', 'v1', http=http)
 
-    results = service.users().labels().list(userId='me').execute()
-    labels = results.get('labels', [])
-
-    if not labels:
-        print('No labels found.')
-    else:
-      print('Labels:')
-      for label in labels:
-        print(label['name'])
-
     # Search for messages matching query which CommSec trade confirmation emails contain
     user_id = 'me' # For current authorised user
     messages = ListMessagesMatchingQuery(service, user_id, 'subject:equity trade confirmation')
-    print(len(messages))
+    print("Num Emails matching trade confiration query: "+str(len(messages)))
     for message in messages:
-    	msg_id = message['id']
-    	msg = service.users().messages().get(userId=user_id, id=msg_id).execute() # full msg object fetch
-    	print(msg['snippet'])
-    	print(message)
-    	exit() # TODO just for now
+        msg_id = message['id']
+        mime_msg = GetMimeMessage(service, user_id, msg_id)
+
+        # print(mime_msg)
+        date = mime_msg['Date']
+        subject = mime_msg['Subject']
+        txtBody = base64.urlsafe_b64decode(getTextBodyFromMimeMsg(mime_msg)).decode("utf-8")
+        print("{}\n{}\n{}".format(date, subject, txtBody))
+        exit()
+
+        msgObj = service.users().messages().get(userId=user_id, id=msg_id, 
+                                                format='full').execute() # full msg object fetch
+        # for key in msgObj['payload']:
+        #     print(key)
+        print(msgObj['payload']['headers'])
+        for headerKey in msgObj['payload']['headers']:
+            print(headerKey)
+        print("==========")
+
+        # TODO later, check if multipart msg and turn into nice function similar to this
+        # https://stackoverflow.com/questions/31967587/python-extract-the-body-from-a-mail-in-plain-text
+        msg_str = msgObj['payload']['parts'][0]['body']['data']
+        print(base64.urlsafe_b64decode(msg_str).decode("utf-8"))
+        # Note only need to properly decode if want in utf-8 format
+        # print(base64.urlsafe_b64decode(msg_str).decode("utf-8"))
+
+        # msg_str = base64.urlsafe_b64decode(msgObj['raw'].encode('ASCII'))
+        # mime_msg = email.message_from_string(msg_str)
+        # print(mime_msg.get_payload())
+        # print(msgObj['snippet'])
+        # print("========")
+        # print(msgObj['raw'].encode('ASCII'))
+        exit() # TODO just for now
 
     # Capital gains/losses info
     # http://www.thebull.com.au/experts/a/277-how-do-you-calculate-capital-gains-and-losses-on-share-trades.html
