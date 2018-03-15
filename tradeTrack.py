@@ -17,6 +17,7 @@ from oauth2client.file import Storage
 from apiclient import errors
 import email
 import base64
+import re
 
 import tradeTracker # Separate module file with main tradeTracker module
 
@@ -135,6 +136,68 @@ def getTextBodyFromMimeMsg(mime_msg):
     elif messageMainType == 'text':
             return mime_msg.get_payload()
 
+def processMimeMsgforTradeTrack(tradeTrack, mime_msg):
+    date = mime_msg['Date']
+    subject = mime_msg['Subject']
+    txtBody = base64.urlsafe_b64decode(getTextBodyFromMimeMsg(mime_msg)).decode("utf-8")
+    # print("{}\n{}\n{}".format(date, subject, txtBody))
+    
+    # Skip email if it is not a trade confirmation email with the following format subject
+    # "CommSec - BUB Equity Trade Confirmation"
+    # TODO update this later to handle other securities
+    if not re.match(r'^CommSec - [A-Z]{3} Equity Trade Confirmation', subject):
+        return
+    
+    # Get all the relevant information and store in the tradeTrack
+    stockCode = re.sub(r'^CommSec - ([A-Z]{3}) Equity Trade Confirmation', r'\1', subject)
+
+    # Just for debugging
+    # txtBody = 'Attached is an electronic confirmation confirming that we have SOLD for you 5000 units in CRESO PHARMA LTD FPO today on Account 2677206'
+    # txtBody = 'Attached is an electronic confirmation confirming that we have BOUGHT for you 14700 units in ESENSE-LAB LTD CDI 1:1 at 0.340 on Account 2677206.'
+
+    # Case 1: For emails where order was not fully processed, price was not included
+    # Assumptions: Assume company names will always be upper case (and may contain weird characters like -.:)
+    matchString1 = r'Attached is an electronic confirmation confirming that we have (SOLD|BOUGHT) for you ([0-9]+) units in ([^a-z]+) at ([0-9.]+) '
+    matchString2 = r'Attached is an electronic confirmation confirming that we have (SOLD|BOUGHT) for you ([0-9]+) units in ([^a-z]+) [a-z]+'
+    if not re.search(matchString1, txtBody):
+        print("! - Email body missing 'price' value, check email's pdf and enter 'stock price' specified")
+        print("     Details of email with missing info in body:\n     - Date: {}\n     - Subject: {}\n".format(date, subject))
+        if re.search(matchString2, txtBody):
+            m = re.search(matchString2, txtBody)
+            tradeType = m.group(1)
+            units = m.group(2)
+            companyName = m.group(3)
+
+            correctTypeFlag = False
+            while not correctTypeFlag:
+                try:
+                    price = float(input("     Enter price here: "))
+                    correctTypeFlag = True
+                except ValueError as e:
+                    print("     !!! Warning !!! price entered was not a number, please try again")
+
+                # Double check
+                if correctTypeFlag:
+                    confirm = input("     Confirm correct price is ${} per share? [y/n]: ".format(price))
+                    if confirm != "y":
+                        correctTypeFlag = False
+
+        else:
+            print("another unknown email format")
+            print("Date: {}, Subject: {}".format(date, subject))
+            exit()
+    else:
+        m = re.search(matchString1, txtBody)
+        tradeType = m.group(1)
+        units = m.group(2)
+        companyName = m.group(3)
+        price = m.group(4)
+
+    # Store it in tradeTrack's tradeLogs
+    tradeTrack.addToTradeLog(date, stockCode, companyName, tradeType, int(units), float(price))
+
+    print("{}, {}, {}, {}, {}, {}".format(date, stockCode, companyName, tradeType, units, price))
+
 def main():
     """Shows basic usage of the Gmail API.
 
@@ -142,49 +205,27 @@ def main():
     of the user's Gmail account.
     """
 
+    # Check if there are cached trade logs
+
     # Get credentials
     credentials = get_credentials()
     http = credentials.authorize(httplib2.Http())
     service = discovery.build('gmail', 'v1', http=http)
 
     # Search for messages matching query which CommSec trade confirmation emails contain
+    tradeTrack = tradeTracker.tradeTracker() # Module for tracking trades
     user_id = 'me' # For current authorised user
     messages = ListMessagesMatchingQuery(service, user_id, 'subject:equity trade confirmation')
+
     print("Num Emails matching trade confiration query: "+str(len(messages)))
+    print("Processing email trade receipts")
     for message in messages:
         msg_id = message['id']
         mime_msg = GetMimeMessage(service, user_id, msg_id)
-
-        # print(mime_msg)
-        date = mime_msg['Date']
-        subject = mime_msg['Subject']
-        txtBody = base64.urlsafe_b64decode(getTextBodyFromMimeMsg(mime_msg)).decode("utf-8")
-        print("{}\n{}\n{}".format(date, subject, txtBody))
-        exit()
-
-        msgObj = service.users().messages().get(userId=user_id, id=msg_id, 
-                                                format='full').execute() # full msg object fetch
-        # for key in msgObj['payload']:
-        #     print(key)
-        print(msgObj['payload']['headers'])
-        for headerKey in msgObj['payload']['headers']:
-            print(headerKey)
-        print("==========")
-
-        # TODO later, check if multipart msg and turn into nice function similar to this
-        # https://stackoverflow.com/questions/31967587/python-extract-the-body-from-a-mail-in-plain-text
-        msg_str = msgObj['payload']['parts'][0]['body']['data']
-        print(base64.urlsafe_b64decode(msg_str).decode("utf-8"))
-        # Note only need to properly decode if want in utf-8 format
-        # print(base64.urlsafe_b64decode(msg_str).decode("utf-8"))
-
-        # msg_str = base64.urlsafe_b64decode(msgObj['raw'].encode('ASCII'))
-        # mime_msg = email.message_from_string(msg_str)
-        # print(mime_msg.get_payload())
-        # print(msgObj['snippet'])
-        # print("========")
-        # print(msgObj['raw'].encode('ASCII'))
+        processMimeMsgforTradeTrack(tradeTrack, mime_msg)
+        
         exit() # TODO just for now
+
 
     # Capital gains/losses info
     # http://www.thebull.com.au/experts/a/277-how-do-you-calculate-capital-gains-and-losses-on-share-trades.html

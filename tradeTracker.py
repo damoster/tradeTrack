@@ -1,9 +1,9 @@
 
 # trade object storing transaction information
-class trade():
-	def __init__(self, date, code, companyName, tradeType, units, price, brokerageFee):
+class tradeRecord():
+	def __init__(self, date, stockCode, companyName, tradeType, units, price, brokerageFee):
 		self.date = date
-		self.code = code
+		self.stockCode = stockCode
 		self.companyName = companyName
 		self.tradeType = tradeType
 		self.units = units
@@ -28,9 +28,9 @@ class heldStock():
 
 # object used in tradeSummary for recording sell transaction
 class sellTransaction():
-	def __init__(self, date, code, units, aveBuySharePrice, sellPrice, brokerageFee):
+	def __init__(self, date, stockCode, units, aveBuySharePrice, sellPrice, brokerageFee):
 		self.date = date
-		self.code = code
+		self.stockCode = stockCode
 		self.units = units
 		self.aveBuySharePrice = aveBuySharePrice
 		self.sellPrice = sellPrice
@@ -53,10 +53,27 @@ class tradeTracker():
     	self.portfolio = {} # Dict of heldStock objects with stockCode as dict key
     	self.summary = tradeSummary()
 
-    def addToTradeLog(self, date, code, companyName, tradeType, units, price, brokerageFee):
-    	self.tradeLog.append(trade(date, code, companyName, tradeType, units, price, brokerageFee))
+    def calculateBrokerageFee(self, transactionValue):
 
+    	if transactionValue <= 1000:
+    		brokerageFee = 10
+    	elif (transactionValue > 1000) and (transactionValue <= 10000):
+    		brokerageFee = 19.95
+    	elif (transactionValue > 10000) and (transactionValue <= 25000):
+    		brokerageFee = 29.95
+    	else:
+    		brokerageFee = 0.0012 * transactionValue
 
+    	return brokerageFee
+
+    def addToTradeLog(self, date, stockCode, companyName, tradeType, units, price):
+    	brokerageFee = self.calculateBrokerageFee(units * price)
+    	self.tradeLog.append(tradeRecord(date, stockCode, companyName, tradeType, units, price, brokerageFee))
+
+    def updatePortfolio(self):
+    	# Go through trade log from oldest to newest
+    	for i in reversed(range(len(tradeLog)-1)):
+    		trade = tradeLog[i]
 
     # information I need
     # - Subject for getting the 'stock code'
