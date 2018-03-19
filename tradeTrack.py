@@ -296,9 +296,15 @@ class tradeLogCache():
         else:
             return "ERROR!"
 
+    def getDayString(self, day):
+        if int(day) < 10:
+            return "0" + str(day)
+        else:
+            return str(day)
+
     def makeLogKey(self, dateTime, stockCode):
         t = dateTime.split(" ")
-        dateTimeKey = "{}/{}/{} {} {}".format(t[2], self.getMonthNum(t[1]), t[0], t[3], t[4]) # Special format for sorting
+        dateTimeKey = "{}/{}/{} {} {}".format(t[2], self.getMonthNum(t[1]), self.getDayString(t[0]), t[3], t[4]) # Special format for sorting
         return (dateTimeKey+" - "+stockCode)
 
     def inCache(self, dateTime, stockCode):
@@ -366,6 +372,9 @@ def main():
 
     localTradeLogCache.writeToFile()
     localTradeLogCache.loadIntoTradeTrack(tradeTrack) # Load data from cache into tradeTrack
+
+    tradeTrack.updatePortfolioAndSummary()
+    tradeTrack.printSummary()
 
     # Capital gains/losses info
     # http://www.thebull.com.au/experts/a/277-how-do-you-calculate-capital-gains-and-losses-on-share-trades.html
