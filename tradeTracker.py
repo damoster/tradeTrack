@@ -71,6 +71,7 @@ class tradeTracker():
     def addToTradeLog(self, dateTime, stockCode, companyName, tradeType, units, price):
         brokerageFee = self.calculateBrokerageFee(units, price)
         self.tradeLog.append(tradeRecord(dateTime, stockCode, companyName, tradeType, units, price, brokerageFee))
+        # print("{}, {}, {}, {}, {}, {}".format(dateTime, stockCode, companyName, tradeType, units, price)) # For debugging
 
     def updatePortfolio(self):
         # Go through trade log from oldest to newest

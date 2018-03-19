@@ -151,6 +151,7 @@ def processMimeMsgforTradeTrack(localTradeLogCache, mime_msg):
     
     # Get all the relevant information and store in the tradeTrack
     stockCode = re.sub(r'^CommSec - ([A-Z]{3}) Equity Trade Confirmation.*', r'\1', subject)
+    print(dateTime+" - "+stockCode)
 
     # TODO Check if already in cache (User doesn't need to re-enter manual ones if already in cache) or is new email 
     if localTradeLogCache.inCache(dateTime, stockCode):
@@ -165,8 +166,9 @@ def processMimeMsgforTradeTrack(localTradeLogCache, mime_msg):
     matchString1 = r'Attached is an electronic confirmation confirming that we have (SOLD|BOUGHT) for you ([0-9]+) units in ([^a-z]+) at ([0-9.]+) '
     matchString2 = r'Attached is an electronic confirmation confirming that we have (SOLD|BOUGHT) for you ([0-9]+) units in ([^a-z]+) [a-z]+'
     if not re.search(matchString1, txtBody):
-        print("! - Email body missing 'price' value, check email's pdf and enter 'stock price' specified")
-        print("     Details of email with missing info in body:\n     - dateTime: {}\n     - Subject: {}\n".format(dateTime, subject))
+        print("! -- Email body missing 'price' value, check email's pdf and enter 'stock price' specified")
+        print("     Log in to your gmail and search: '{} equity'".format(stockCode))
+        print("     Details of email with missing info in body:\n     - DateTime: {}\n     - Subject: {}\n".format(dateTime, subject))
         if re.search(matchString2, txtBody):
             m = re.search(matchString2, txtBody)
             tradeType = m.group(1)
@@ -179,17 +181,19 @@ def processMimeMsgforTradeTrack(localTradeLogCache, mime_msg):
                     price = float(input("     Enter price here: "))
                     correctTypeFlag = True
                 except ValueError as e:
-                    print("     !!! Warning !!! price entered was not a number, please try again")
+                    print("     ! -- Warning -- ! price entered was not a number, please try again")
 
                 # Double check
                 if correctTypeFlag:
-                    confirm = input("     Confirm correct price is ${} per share? [y/n]: ".format(price))
-                    if confirm != "y":
-                        correctTypeFlag = False
+                    confirm = ''
+                    while not (confirm == "y" or confirm == "n"):
+                        confirm = input("     Confirm correct price is ${} per share? [y/n]: ".format(price))
+                        if confirm == "n":
+                            correctTypeFlag = False
 
         else:
-            print("another unknown email format")
-            print("dateTime: {}, Subject: {}".format(dateTime, subject))
+            print("Another unknown email format, please find email format and contact David")
+            print("DateTime: {}, Subject: {}".format(dateTime, subject))
             exit()
     else:
         m = re.search(matchString1, txtBody)
@@ -200,8 +204,7 @@ def processMimeMsgforTradeTrack(localTradeLogCache, mime_msg):
 
     # Check if need to store in cache (Data to be stored in a file)
     localTradeLogCache.checkAddToCache(dateTime, stockCode, companyName, tradeType, units, price)
-
-    print("{}, {}, {}, {}, {}, {}".format(dateTime, stockCode, companyName, tradeType, units, price))
+    # print("{}, {}, {}, {}, {}, {}".format(dateTime, stockCode, companyName, tradeType, units, price))
 
 def updateLogsFromGmail(localTradeLogCache):
     # Search for messages matching query which CommSec trade confirmation emails contain
@@ -215,15 +218,10 @@ def updateLogsFromGmail(localTradeLogCache):
     print("\nProcessing emails to update logs:\n")
     print("---- Num Emails matching trade confiration query: "+str(len(messages)))
     print("---- Processing email trade receipts")
-    i = 0 # TODO just for testing
     for message in messages:
         msg_id = message['id']
         mime_msg = GetMimeMessage(service, user_id, msg_id)
         processMimeMsgforTradeTrack(localTradeLogCache, mime_msg)
-        
-        i += 1
-        if i == 2:
-            break # TODO just for now
 
 class tradeLogCache():
     def __init__(self, cachFilename):
@@ -350,7 +348,7 @@ def main():
     localTradeLogCache = tradeLogCache(cachFilename) # Once separate moduel: tradeLogCache.tradeLogCache()
 
     # Check if can load file from cache
-    print("TradeTrack (TM) DavidMo")
+    print("|TradeTrack| by David Mo")
     print("---- To hard reset Cache, need to delete the file: [{}]".format(cachFilename))
     if localTradeLogCache.tryLoadFromFile():
         print("---- Trade history successfly loaded from trade log cache ----")
