@@ -1,4 +1,6 @@
-client_secret.json
 example/
 testingCode/
 __pycache__
+
+client_secret.json
+localTradeLogCache.txt
